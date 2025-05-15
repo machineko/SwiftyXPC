@@ -19,6 +19,23 @@ import os
 ///
 /// A listener must receive `.activate()` before it can receive any messages.
 public final class XPCListener {
+    
+    public func setRawMessageHandler(
+        name: String,
+        handler: @escaping (XPCConnection, xpc_object_t) async throws -> xpc_object_t
+    ) {
+        switch self.backing {
+        case .xpcMain:
+            self._messageHandlers[name] = XPCConnection.MessageHandler(rawHandler: handler)
+        case .connection(let connection, let isMulti):
+            if !isMulti {
+                connection.setRawMessageHandler(name: name, handler: handler)
+            } else {
+                self._messageHandlers[name] = XPCConnection.MessageHandler(rawHandler: handler)
+            }
+        }
+    }
+
     /// The type of the listener.
     public enum ListenerType {
         /// An anonymous listener connection. This can be passed to other processes by embedding its `endpoint` in an XPC message.

@@ -221,7 +221,81 @@ final class SwiftyXPCTests: XCTestCase {
             XCTFail("Sending message to cancelled connection should throw XPCError.connectionInvalid")
             return
         }
+        
     }
+    func testRawXPCDictionary() async throws {
+        let conn = try self.openConnection()
+
+        let dictionary = xpc_dictionary_create(nil, nil, 0)
+        xpc_dictionary_set_int64(dictionary, "number", 42)
+        xpc_dictionary_set_string(dictionary, "text", "hello world")
+
+        print("Test sending dictionary with number: 42 and text: 'hello world'")
+
+        let response = try await conn.sendRawMessage(
+            name: CommandSet.rawDictionaryTest,
+            dictionary: dictionary
+        )
+
+        debugXPCDictionary(response)
+
+        if let doubleVal = xpc_dictionary_get_value(response, "doubledNumber") {
+            let intValue = xpc_int64_get_value(doubleVal)
+            XCTAssertEqual(intValue, 84)
+        } else {
+            XCTFail("Expected doubledNumber in response but it was nil")
+        }
+
+        if let uppercasedTextVal = xpc_dictionary_get_value(response, "uppercasedText") {
+            if let uppercasedText = xpc_string_get_string_ptr(uppercasedTextVal) {
+                let textValue = String(cString: uppercasedText)
+                XCTAssertEqual(textValue, "HELLO WORLD")
+            } else {
+                XCTFail("Could not get string pointer from uppercasedText")
+            }
+        } else {
+            XCTFail("Expected uppercasedText in response but it was nil")
+        }
+        if let timestampVal = xpc_dictionary_get_value(response, "timestamp") {
+               let timestamp = xpc_date_get_value(timestampVal)
+               XCTAssertNotEqual(timestamp, 0, "Timestamp should not be zero")
+
+               let currentTime = Date().timeIntervalSince1970
+               XCTAssertLessThan(abs(Int64(currentTime) - timestamp), 5, "Timestamp should be recent")
+           } else {
+               XCTFail("Response missing timestamp key")
+           }
+
+    }
+
+
+    func debugXPCDictionary(_ dict: xpc_object_t) {
+        print("XPC Dictionary contents:")
+        xpc_dictionary_apply(dict, { key, value in
+            let keyString = String(cString: key)
+            let type = xpc_get_type(value)
+
+            var valueString = "unknown"
+            if type == XPC_TYPE_INT64 {
+                valueString = "\(xpc_int64_get_value(value))"
+            } else if type == XPC_TYPE_STRING {
+                if let strValue = xpc_string_get_string_ptr(value) {
+                    valueString = "'\(String(cString: strValue))'"
+                } else {
+                    valueString = "nil string"
+                }
+            } else if type == XPC_TYPE_DATE {
+                let timeValue = xpc_date_get_value(value)
+                valueString = "date: \(Date(timeIntervalSince1970: TimeInterval(timeValue)))"
+            } else {
+                valueString = "type: \(type)"
+            }
+
+            print("  \(keyString) = \(valueString)")
+            return true
+        })
+    }
+
 
     private func openConnection(codeSigningRequirement: String? = nil) throws -> XPCConnection {
         let conn = try XPCConnection(

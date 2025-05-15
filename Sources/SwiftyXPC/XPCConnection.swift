@@ -30,6 +30,59 @@ public class XPCConnection: @unchecked Sendable {
         static let error = "com.charlessoft.SwiftyXPC.XPCEventHandler.Error"
     }
 
+    public func sendRawMessage(name: String, dictionary: xpc_object_t) async throws -> xpc_object_t {
+        return try await withCheckedThrowingContinuation { continuation in
+            let message = xpc_dictionary_create(nil, nil, 0)
+
+            xpc_dictionary_set_string(message, MessageKeys.name, name)
+            xpc_dictionary_set_value(message, MessageKeys.body, dictionary)
+            xpc_connection_send_message_with_reply(self.connection, message, nil) { event in
+                do {
+                    switch event.type {
+                    case .dictionary:
+                        if let error = xpc_dictionary_get_value(event, MessageKeys.error) {
+                            throw try XPCErrorRegistry.shared.decodeError(error)
+                        }
+
+                        guard let body = xpc_dictionary_get_value(event, MessageKeys.body) else {
+                            throw Error.missingMessageBody
+                        }
+                        continuation.resume(returning: body)
+                    case .error:
+                        throw XPCError(error: event)
+                    default:
+                        throw Error.typeMismatch(expected: .dictionary, actual: event.type)
+                    }
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    public func setRawMessageHandler(
+        name: String,
+        handler: @escaping (XPCConnection, xpc_object_t) async throws -> xpc_object_t
+    ) {
+        let rawHandler: MessageHandler.RawHandler = { connection, event in
+            guard let body = xpc_dictionary_get_value(event, MessageKeys.body) else {
+                throw Error.missingMessageBody
+            }
+
+            return try await handler(connection, body)
+        }
+
+        self.messageHandlers[name] = MessageHandler(rawHandler: rawHandler)
+    }
+    
+    public func sendOnewayRawMessage(name: String, dictionary: xpc_object_t) throws {
+        try self.sendOnewayRawMessage(
+            name: name,
+            body: dictionary,
+            key: MessageKeys.body,
+            asReplyTo: nil
+        )
+    }
     /// Represents the various types of connection that can be created.
     public enum ConnectionType {
         /// Connect to an embedded XPC service inside the current application’s bundle. Pass the XPC service’s bundle ID as the `bundleID` parameter.
@@ -46,8 +99,8 @@ public class XPCConnection: @unchecked Sendable {
     internal class MessageHandler {
         typealias RawHandler = ((XPCConnection, xpc_object_t) async throws -> xpc_object_t)
         let closure: RawHandler
-        let requestType: Codable.Type
-        let responseType: Codable.Type
+        let requestType: Codable.Type?
+        let responseType: Codable.Type?
 
         init<Request: Codable, Response: Codable>(closure: @escaping (XPCConnection, Request) async throws -> Response) {
             self.requestType = Request.self
@@ -63,6 +116,12 @@ public class XPCConnection: @unchecked Sendable {
 
                 return try XPCEncoder().encode(response)
             }
+        }
+
+        init(rawHandler: @escaping RawHandler) {
+            self.requestType = nil
+            self.responseType = nil
+            self.closure = rawHandler
         }
     }
 
