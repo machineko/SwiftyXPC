@@ -10,6 +10,43 @@ import XPC
 ///
 /// The connection must receive `.activate()` before it can send or receive any messages.
 public class XPCConnection: @unchecked Sendable {
+    
+    public func sendMixedMessage<Request: Codable>(
+        name: String,
+        codablePayload: Request,
+        rawDictionary: xpc_object_t
+    ) async throws -> xpc_object_t {
+        let message = xpc_dictionary_create(nil, nil, 0)
+
+        xpc_dictionary_set_string(message, MessageKeys.name, name)
+
+        let encodedPayload = try XPCEncoder().encode(codablePayload)
+        xpc_dictionary_set_value(message, MessageKeys.body, encodedPayload)
+
+        xpc_dictionary_set_value(message, "RawPayload", rawDictionary)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            xpc_connection_send_message_with_reply(self.connection, message, nil) { event in
+                do {
+                    switch event.type {
+                    case .dictionary: break
+                    case .error: throw XPCError(error: event)
+                    default: throw Error.typeMismatch(expected: .dictionary, actual: event.type)
+                    }
+
+                    if let error = xpc_dictionary_get_value(event, MessageKeys.error) {
+                        throw try XPCErrorRegistry.shared.decodeError(error)
+                    }
+
+                    continuation.resume(returning: event)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+
     /// Errors specific to `XPCConnection`.
     public enum Error: Swift.Error, Codable {
         /// An XPC message was missing its name.
@@ -22,9 +59,11 @@ public class XPCConnection: @unchecked Sendable {
         case typeMismatch(expected: XPCType, actual: XPCType)
         /// Only used on macOS versions prior to 12.0.
         case callerFailedCredentialCheck(OSStatus)
+        case missingRawBody
+
     }
 
-    private struct MessageKeys {
+    public struct MessageKeys {
         static let name = "com.charlessoft.SwiftyXPC.XPCEventHandler.Name"
         static let body = "com.charlessoft.SwiftyXPC.XPCEventHandler.Body"
         static let error = "com.charlessoft.SwiftyXPC.XPCEventHandler.Error"
@@ -400,6 +439,40 @@ public class XPCConnection: @unchecked Sendable {
                     }
 
                     continuation.resume(returning: response)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    public func sendMessageXPC(name: String, request: some Codable) async throws -> xpc_object_t {
+        let body = try XPCEncoder().encode(request)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let message = xpc_dictionary_create(nil, nil, 0)
+
+            xpc_dictionary_set_string(message, MessageKeys.name, name)
+            xpc_dictionary_set_value(message, MessageKeys.body, body)
+
+            xpc_connection_send_message_with_reply(self.connection, message, nil) { event in
+                do {
+                    switch event.type {
+                    case .dictionary: break
+                    case .error: throw XPCError(error: event)
+                    default: throw Error.typeMismatch(expected: .dictionary, actual: event.type)
+                    }
+
+                    if let error = xpc_dictionary_get_value(event, MessageKeys.error) {
+                        throw try XPCErrorRegistry.shared.decodeError(error)
+                    }
+
+                    guard let body = xpc_dictionary_get_value(event, MessageKeys.body) else {
+                        throw Error.missingMessageBody
+                    }
+
+
+                    continuation.resume(returning: body)
                 } catch {
                     continuation.resume(throwing: error)
                 }

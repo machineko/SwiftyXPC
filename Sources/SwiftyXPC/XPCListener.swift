@@ -20,6 +20,64 @@ import os
 /// A listener must receive `.activate()` before it can receive any messages.
 public final class XPCListener {
     
+    public func setMessageHandlerRaw<Request: Codable>(
+        name: String,
+        handler: @escaping (XPCConnection, Request) async throws -> xpc_object_t
+    ) {
+        let rawHandler: (XPCConnection, xpc_object_t) async throws -> xpc_object_t = { connection, event in
+            guard let body = xpc_dictionary_get_value(event, "com.charlessoft.SwiftyXPC.XPCEventHandler.Body") else {
+                throw XPCConnection.Error.missingMessageBody
+            }
+
+            let request = try XPCDecoder().decode(type: Request.self, from: body)
+
+            return try await handler(connection, request)
+        }
+
+        switch self.backing {
+        case .xpcMain:
+            self._messageHandlers[name] = XPCConnection.MessageHandler(rawHandler: rawHandler)
+        case .connection(let connection, let isMulti):
+            if !isMulti {
+                connection.setRawMessageHandler(name: name, handler: rawHandler)
+            } else {
+                self._messageHandlers[name] = XPCConnection.MessageHandler(rawHandler: rawHandler)
+            }
+        }
+    }
+    
+    public func setMixedMessageHandler<Request: Codable>(
+        name: String,
+        handler: @escaping (XPCConnection, Request, xpc_object_t) async throws -> xpc_object_t
+    ) {
+        let rawHandler: (XPCConnection, xpc_object_t) async throws -> xpc_object_t = { connection, event in
+            guard let body = xpc_dictionary_get_value(event, "com.charlessoft.SwiftyXPC.XPCEventHandler.Body") else {
+                throw XPCConnection.Error.missingMessageBody
+            }
+
+            guard let rawPayload = xpc_dictionary_get_value(event, "RawPayload") else {
+                throw XPCConnection.Error.missingRawBody
+            }
+
+            let request = try XPCDecoder().decode(type: Request.self, from: body)
+
+            return try await handler(connection, request, rawPayload)
+        }
+
+        switch self.backing {
+        case .xpcMain:
+            self._messageHandlers[name] = XPCConnection.MessageHandler(rawHandler: rawHandler)
+        case .connection(let connection, let isMulti):
+            if !isMulti {
+                connection.setRawMessageHandler(name: name, handler: rawHandler)
+            } else {
+                self._messageHandlers[name] = XPCConnection.MessageHandler(rawHandler: rawHandler)
+            }
+        }
+    }
+    
+    
+
     public func setRawMessageHandler(
         name: String,
         handler: @escaping (XPCConnection, xpc_object_t) async throws -> xpc_object_t
@@ -165,6 +223,8 @@ public final class XPCListener {
         self._messageHandlers[name] = XPCConnection.MessageHandler(closure: handler)
     }
 
+    
+    
     private let _codeSigningRequirement: String?
 
     private var _errorHandler: XPCConnection.ErrorHandler? = nil

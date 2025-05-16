@@ -267,7 +267,29 @@ final class SwiftyXPCTests: XCTestCase {
            }
 
     }
+    
+    func testIOSurfaceTransfer() async throws {
+        let conn = try self.openConnection()
+        let device = MTLCreateSystemDefaultDevice()!
 
+        struct IOSurfaceMessage: Codable, Sendable {
+            public let size: Int64
+        }
+        let response = try await conn.sendMessageXPC(
+            name: CommandSet.ioSurfaceTest,
+            request: IOSurfaceMessage(size: 256)
+        )
+
+        let xpcResp  = xpc_dictionary_get_value(response, "iosurface")!
+        let ioStuff = IOSurfaceLookupFromXPCObject(xpcResp)!
+        let newBuff =  device.makeBuffer(bytesNoCopy: IOSurfaceGetBaseAddress(ioStuff),
+                                         length: 256 * MemoryLayout<Float32>.stride,
+                                          options: .storageModeShared,
+                                         deallocator: nil)!
+        XCTAssert(newBuff.contents().assumingMemoryBound(to: Float32.self)[0] == 2.0, "iosurface transfer failed or metal buffer creation failed")
+
+    }
+    
 
     func debugXPCDictionary(_ dict: xpc_object_t) {
         print("XPC Dictionary contents:")

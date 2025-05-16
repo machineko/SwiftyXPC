@@ -9,6 +9,9 @@ import Foundation
 import Dispatch
 import SwiftyXPC
 import TestShared
+import IOSurface
+import Metal
+
 class HelperLogger {
     private let fileHandle: FileHandle
     private let dateFormatter: DateFormatter
@@ -154,6 +157,8 @@ final class XPCService: Sendable {
                 logger.log("Returning response dictionary")
                 return response
             }
+            
+            listener.setMessageHandlerRaw(name: CommandSet.ioSurfaceTest, handler: xpcService.createIOSurfaceBufferMixed)
 
 
             listener.activate()
@@ -163,6 +168,35 @@ final class XPCService: Sendable {
         }
     }
 
+    private func createIOSurfaceBufferMixed(_: XPCConnection, request: IOSurfaceMessage) async throws -> xpc_object_t {
+        let surfaceSize = Int(request.size)
+        let aData: [Float32] = Array(repeating: 2.0, count: surfaceSize)
+        let device = MTLCreateSystemDefaultDevice()!
+        let properties: [IOSurfacePropertyKey: Any] = [
+            .width: surfaceSize * MemoryLayout<Float32>.stride,
+            .bytesPerRow: surfaceSize * MemoryLayout<Float32>.stride,
+            .allocSize: surfaceSize * MemoryLayout<Float32>.stride,
+            .height: 1
+        ]
+
+        guard let surface = IOSurfaceCreate(properties as CFDictionary) else {
+            fatalError("Cannot create IOSurface")
+        }
+
+        let tmpBuff = device.makeBuffer(bytesNoCopy: IOSurfaceGetBaseAddress(surface),
+                             length: aData.count * MemoryLayout<Float32>.stride,
+                              options: .storageModeShared,
+                             deallocator: nil)
+        IOSurfaceLock(surface, [], nil)
+        memcpy(tmpBuff?.contents(), aData, aData.count * MemoryLayout<Float32>.stride)
+        IOSurfaceUnlock(surface, [], nil)
+        let xpcObj = IOSurfaceCreateXPCObject(surface)
+        let rawResponse = xpc_dictionary_create(nil, nil, 0)
+        xpc_dictionary_set_value(rawResponse, "iosurface", xpcObj)
+        return rawResponse
+    }
+
+    
     private func reportIDs(connection: XPCConnection) async throws -> ProcessIDs {
         try ProcessIDs(connection: connection)
     }

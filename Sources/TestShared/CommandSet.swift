@@ -13,6 +13,7 @@ public struct CommandSet {
     public static let transportData = "com.charlessoft.SwiftyXPC.Tests.TransportData"
     public static let tellAJoke = "com.charlessoft.SwiftyXPC.Tests.TellAJoke"
     public static let pauseOneSecond = "com.charlessoft.SwiftyXPC.Tests.PauseOneSecond"
-    public static let rawDictionaryTest = "rawDictionaryTest"
+    public static let rawDictionaryTest = "com.charlessoft.SwiftyXPC.Tests.rawDictionaryTest"
+    public static let ioSurfaceTest = "com.charlessoft.SwiftyXPC.Tests.ioSurfaceTest"
 
 }
