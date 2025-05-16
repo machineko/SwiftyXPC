@@ -15,5 +15,7 @@ public struct CommandSet {
     public static let pauseOneSecond = "com.charlessoft.SwiftyXPC.Tests.PauseOneSecond"
     public static let rawDictionaryTest = "com.charlessoft.SwiftyXPC.Tests.rawDictionaryTest"
     public static let ioSurfaceTest = "com.charlessoft.SwiftyXPC.Tests.ioSurfaceTest"
+    public static let ioSurfaceTestCodable = "com.charlessoft.SwiftyXPC.Tests.ioSurfaceTestCodable"
+
 
 }

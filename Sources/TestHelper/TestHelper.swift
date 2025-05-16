@@ -73,7 +73,8 @@ final class XPCService: Sendable {
             listener.setMessageHandler(name: CommandSet.transportData, handler: xpcService.transportData)
             listener.setMessageHandler(name: CommandSet.tellAJoke, handler: xpcService.tellAJoke)
             listener.setMessageHandler(name: CommandSet.pauseOneSecond, handler: xpcService.pauseOneSecond)
-           
+            listener.setMessageHandler(name: CommandSet.ioSurfaceTestCodable, handler: xpcService.ioSurfaceTestCodable)
+
             listener.setRawMessageHandler(name: CommandSet.rawDictionaryTest) { _, dictionary in
                 let dictionary = xpc_dictionary_get_value(dictionary, "com.charlessoft.SwiftyXPC.XPCEventHandler.Body")!
 
@@ -166,6 +167,47 @@ final class XPCService: Sendable {
         } catch {
             fatalError("Error while setting up XPC service: \(error)")
         }
+    }
+    
+    struct IOSurfaceResponse: Codable {
+        @IOSurfaceForXPC var surface: IOSurface
+        let status: Int
+        let message: String
+
+        init(surfaceRef: IOSurfaceRef, status: Int = 200, message: String = "Success") {
+            // Convert IOSurfaceRef to IOSurface
+            self._surface = IOSurfaceForXPC(wrappedValue: unsafeBitCast(surfaceRef, to: IOSurface.self))
+            self.status = status
+            self.message = message
+        }
+    }
+
+    
+    private func ioSurfaceTestCodable(_: XPCConnection, request: IOSurfaceMessage) async throws -> IOSurfaceResponse {
+        let surfaceSize = Int(request.size)
+        let aData: [Float32] = Array(repeating: 2.0, count: surfaceSize)
+        let device = MTLCreateSystemDefaultDevice()!
+        let properties: [IOSurfacePropertyKey: Any] = [
+            .width: surfaceSize * MemoryLayout<Float32>.stride,
+            .bytesPerRow: surfaceSize * MemoryLayout<Float32>.stride,
+            .allocSize: surfaceSize * MemoryLayout<Float32>.stride,
+            .height: 1
+        ]
+        guard let surface = IOSurfaceCreate(properties as CFDictionary) else {
+            fatalError("Cannot create IOSurface")
+        }
+
+        let tmpBuff = device.makeBuffer(bytesNoCopy: IOSurfaceGetBaseAddress(surface),
+                             length: aData.count * MemoryLayout<Float32>.stride,
+                              options: .storageModeShared,
+                             deallocator: nil)
+        
+        IOSurfaceLock(surface, [], nil)
+        memcpy(tmpBuff?.contents(), aData, aData.count * MemoryLayout<Float32>.stride)
+        IOSurfaceUnlock(surface, [], nil)
+        
+        return IOSurfaceResponse(surfaceRef: surface)
+
     }
 
     private func createIOSurfaceBufferMixed(_: XPCConnection, request: IOSurfaceMessage) async throws -> xpc_object_t {

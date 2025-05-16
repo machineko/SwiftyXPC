@@ -6,6 +6,7 @@
 //
 
 import XPC
+import IOSurface
 
 /// Enum representing the type of an XPC object.
 public enum XPCType: Codable, Sendable {
@@ -113,4 +114,12 @@ public enum XPCType: Codable, Sendable {
 extension xpc_object_t {
     /// The type of a raw `xpc_object_t`, represented as an `XPCType`.
     var type: XPCType { XPCType(rawType: xpc_get_type(self)) }
+}
+
+@propertyWrapper public struct IOSurfaceForXPC {
+    public var wrappedValue: IOSurface
+
+    public init(wrappedValue: IOSurface) {
+        self.wrappedValue = wrappedValue
+    }
 }

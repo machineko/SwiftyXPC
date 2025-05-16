@@ -7,7 +7,7 @@
 import System
 import XPC
 
-private protocol XPCEncodingContainer {
+protocol XPCEncodingContainer {
     var childContainers: [XPCEncodingContainer] { get }
     var childEncoders: [XPCEncoder._XPCEncoder] { get }
     func finalize()
@@ -21,7 +21,7 @@ extension XPCEncodingContainer {
     fileprivate func encodeFloat<F: BinaryFloatingPoint>(_ f: F) -> xpc_object_t { xpc_double_create(Double(f)) }
     fileprivate func encodeString(_ string: String) -> xpc_object_t { xpc_string_create(string) }
 
-    fileprivate func finalize() {}
+    internal func finalize() {}
 }
 
 /// An implementation of `Encoder` that can encode values to be sent over an XPC connection.
@@ -57,7 +57,7 @@ public class XPCEncoder {
         static let `super` = "Super"
     }
 
-    private class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol, XPCEncodingContainer {
+    class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol, XPCEncodingContainer {
         let dict: xpc_object_t
         var codingPath: [CodingKey] = []
         var childContainers: [XPCEncodingContainer] = []
@@ -272,6 +272,7 @@ public class XPCEncoder {
         func encode(_ value: UInt16) throws { self.encode(xpcValue: self.encodeInteger(value)) }
         func encode(_ value: UInt32) throws { self.encode(xpcValue: self.encodeInteger(value)) }
         func encode(_ value: UInt64) throws { self.encode(xpcValue: self.encodeInteger(value)) }
+//        func encode(_ value: xpc_object_t) throws { value }
 
         func encode(contentsOf sequence: some Sequence<UInt8>) throws {
             switch self.storage {
@@ -372,7 +373,7 @@ public class XPCEncoder {
         }
     }
 
-    private class SingleValueContainer: SingleValueEncodingContainer, XPCEncodingContainer {
+    class SingleValueContainer: SingleValueEncodingContainer, XPCEncodingContainer {
         // We can use `unowned` here, because `SingleValueContainer` should only be created under these circumstances:
         // 1. Created by `XPCEncoder.encode(_:)`, which keeps the encoder alive until after encoding is done, and:
         // 2. Created by an `Encodable` in its implementation of `encode(to:)`, during which the encoder will remain
@@ -438,7 +439,7 @@ public class XPCEncoder {
         }
     }
 
-    fileprivate class _XPCEncoder: Encoder {
+    class _XPCEncoder: Encoder {
         let codingPath: [CodingKey]
         var userInfo: [CodingUserInfoKey: Any] { [:] }
         let original: xpc_object_t?
@@ -570,3 +571,39 @@ public class XPCEncoder {
         return encoded
     }
 }
+import IOSurface
+
+
+
+protocol XPCSingleValueEncodingContainer: SingleValueEncodingContainer {
+    func encodeRawXPCObject(_ value: xpc_object_t)
+}
+
+
+extension XPCEncoder.SingleValueContainer: XPCSingleValueEncodingContainer {
+    func encodeRawXPCObject(_ value: xpc_object_t) {
+        self.encoder.setEncodedValue(value: value)
+        self.hasBeenEncoded = true
+    }
+}
+
+
+
+extension IOSurfaceForXPC: Encodable {
+    public func encode(to encoder: Encoder) throws {
+        let container = encoder.singleValueContainer()
+
+        if let customContainer = container as? XPCSingleValueEncodingContainer {
+            let xpcObject = IOSurfaceCreateXPCObject(self.wrappedValue)
+
+            customContainer.encodeRawXPCObject(xpcObject)
+        } else {
+            throw EncodingError.invalidValue(self,
+                EncodingError.Context(codingPath: encoder.codingPath,
+                                     debugDescription: "IOSurfaceForXPC can only be encoded with XPCEncoder",
+                                     underlyingError: nil))
+        }
+    }
+}
+
+

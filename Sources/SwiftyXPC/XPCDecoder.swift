@@ -85,6 +85,16 @@ extension XPCDecodingContainer {
 
 /// An implementation of `Decoder` that can decode values sent over an XPC connection.
 public final class XPCDecoder {
+    
+    public struct MachPort: Codable {
+        public let port: mach_port_t
+
+        public init(port: mach_port_t) {
+            self.port = port
+        }
+    }
+    
+    
     private final class KeyedContainer<Key: CodingKey>: KeyedDecodingContainerProtocol, XPCDecodingContainer {
         let dict: xpc_object_t
         let codingPath: [CodingKey]
@@ -284,7 +294,8 @@ public final class XPCDecoder {
                 try checkType(xpcType: XPC_TYPE_NULL, swiftType: XPCNull.self, xpc: xpc)
 
                 return XPCNull.shared as! T
-            } else {
+            }
+            else {
                 return try _XPCDecoder(xpc: xpc, codingPath: codingPath).decodeTopLevelObject()
             }
         }
@@ -576,8 +587,8 @@ public final class XPCDecoder {
         }
     }
 
-    private final class SingleValueContainer: SingleValueDecodingContainer, XPCDecodingContainer {
-        let codingPath: [CodingKey]
+    public final class SingleValueContainer: SingleValueDecodingContainer, XPCDecodingContainer {
+        public let codingPath: [CodingKey]
         let xpc: xpc_object_t
         var error: Error? { nil }
 
@@ -586,7 +597,7 @@ public final class XPCDecoder {
             self.xpc = xpc
         }
 
-        func decodeNil() -> Bool {
+        public func decodeNil() -> Bool {
             do {
                 try self.decodeNil(xpc: self.xpc)
                 return true
@@ -595,22 +606,22 @@ public final class XPCDecoder {
             }
         }
 
-        func decode(_ type: Bool.Type) throws -> Bool { try self.decodeBool(xpc: self.xpc) }
-        func decode(_ type: String.Type) throws -> String { try self.decodeString(xpc: self.xpc) }
-        func decode(_ type: Double.Type) throws -> Double { try self.decodeFloatingPoint(xpc: self.xpc) }
-        func decode(_ type: Float.Type) throws -> Float { try self.decodeFloatingPoint(xpc: self.xpc) }
-        func decode(_ type: Int.Type) throws -> Int { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: Int8.Type) throws -> Int8 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: Int16.Type) throws -> Int16 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: Int32.Type) throws -> Int32 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: Int64.Type) throws -> Int64 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: UInt.Type) throws -> UInt { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: UInt8.Type) throws -> UInt8 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: UInt16.Type) throws -> UInt16 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: UInt32.Type) throws -> UInt32 { try self.decodeInteger(xpc: self.xpc) }
-        func decode(_ type: UInt64.Type) throws -> UInt64 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: Bool.Type) throws -> Bool { try self.decodeBool(xpc: self.xpc) }
+        public func decode(_ type: String.Type) throws -> String { try self.decodeString(xpc: self.xpc) }
+        public func decode(_ type: Double.Type) throws -> Double { try self.decodeFloatingPoint(xpc: self.xpc) }
+        public func decode(_ type: Float.Type) throws -> Float { try self.decodeFloatingPoint(xpc: self.xpc) }
+        public func decode(_ type: Int.Type) throws -> Int { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: Int8.Type) throws -> Int8 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: Int16.Type) throws -> Int16 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: Int32.Type) throws -> Int32 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: Int64.Type) throws -> Int64 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: UInt.Type) throws -> UInt { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: UInt8.Type) throws -> UInt8 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: UInt16.Type) throws -> UInt16 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: UInt32.Type) throws -> UInt32 { try self.decodeInteger(xpc: self.xpc) }
+        public func decode(_ type: UInt64.Type) throws -> UInt64 { try self.decodeInteger(xpc: self.xpc) }
 
-        func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        public func decode<T: Decodable>(_ type: T.Type) throws -> T {
             if type == XPCFileDescriptor.self {
                 try checkType(xpcType: XPC_TYPE_FD, swiftType: XPCFileDescriptor.self, xpc: self.xpc)
 
@@ -712,5 +723,39 @@ public final class XPCDecoder {
         let container = decoder.singleValueContainer()
 
         return try container.decode(type)
+    }
+}
+import IOSurface
+
+protocol XPCSingleValueDecodingContainer: SingleValueDecodingContainer {
+    func getRawXPCObject() -> xpc_object_t?
+}
+
+extension XPCDecoder.SingleValueContainer: XPCSingleValueDecodingContainer {
+    func getRawXPCObject() -> xpc_object_t? {
+        return self.xpc
+    }
+}
+
+extension IOSurfaceForXPC: Decodable {
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if let customContainer = container as? XPCSingleValueDecodingContainer,
+           let xpcObject = customContainer.getRawXPCObject() {
+            guard let ioSurface = IOSurfaceLookupFromXPCObject(xpcObject) else {
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(codingPath: decoder.codingPath,
+                                         debugDescription: "IOSurfaceRef could not be looked up from XPC object",
+                                         underlyingError: nil))
+            }
+
+            self.wrappedValue = ioSurface
+        } else {
+            throw DecodingError.typeMismatch(IOSurface.self,
+                DecodingError.Context(codingPath: decoder.codingPath,
+                                     debugDescription: "Cannot decode IOSurface from this container",
+                                     underlyingError: nil))
+        }
     }
 }
