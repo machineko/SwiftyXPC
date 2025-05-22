@@ -12,7 +12,7 @@ import TestShared
 import IOSurface
 import Metal
 
-class HelperLogger {
+@preconcurrency class HelperLogger {
     private let fileHandle: FileHandle
     private let dateFormatter: DateFormatter
     private let queue = DispatchQueue(label: "com.example.helperlogger")

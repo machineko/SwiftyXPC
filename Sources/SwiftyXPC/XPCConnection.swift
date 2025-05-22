@@ -2,6 +2,20 @@ import Security
 import System
 import XPC
 
+final class XPCObjectWrapper: @unchecked Sendable {
+    let object: xpc_object_t
+
+    init(_ object: xpc_object_t) {
+        xpc_retain(object)
+        self.object = object
+    }
+
+    deinit {
+        xpc_release(object)
+    }
+}
+
+
 /// A bidirectional communication channel between two processes.
 ///
 /// Use this class’s `init(type:codeSigningRequirement:)` initializer to connect to an `XPCListener` instance in another process.
@@ -38,7 +52,7 @@ public class XPCConnection: @unchecked Sendable {
                         throw try XPCErrorRegistry.shared.decodeError(error)
                     }
 
-                    continuation.resume(returning: event)
+                    continuation.resume(returning: XPCObjectWrapper(event).object)
                 } catch {
                     continuation.resume(throwing: error)
                 }
@@ -68,7 +82,6 @@ public class XPCConnection: @unchecked Sendable {
         static let body = "com.charlessoft.SwiftyXPC.XPCEventHandler.Body"
         static let error = "com.charlessoft.SwiftyXPC.XPCEventHandler.Error"
     }
-
     public func sendRawMessage(name: String, dictionary: xpc_object_t) async throws -> xpc_object_t {
         return try await withCheckedThrowingContinuation { continuation in
             let message = xpc_dictionary_create(nil, nil, 0)
@@ -86,7 +99,7 @@ public class XPCConnection: @unchecked Sendable {
                         guard let body = xpc_dictionary_get_value(event, MessageKeys.body) else {
                             throw Error.missingMessageBody
                         }
-                        continuation.resume(returning: body)
+                        continuation.resume(returning: XPCObjectWrapper(body).object)
                     case .error:
                         throw XPCError(error: event)
                     default:
@@ -412,7 +425,7 @@ public class XPCConnection: @unchecked Sendable {
 
         return try await withCheckedThrowingContinuation { continuation in
             let message = xpc_dictionary_create(nil, nil, 0)
-
+            
             xpc_dictionary_set_string(message, MessageKeys.name, name)
             xpc_dictionary_set_value(message, MessageKeys.body, body)
 
@@ -470,9 +483,7 @@ public class XPCConnection: @unchecked Sendable {
                     guard let body = xpc_dictionary_get_value(event, MessageKeys.body) else {
                         throw Error.missingMessageBody
                     }
-
-
-                    continuation.resume(returning: body)
+                    continuation.resume(returning: XPCObjectWrapper(body).object)
                 } catch {
                     continuation.resume(throwing: error)
                 }

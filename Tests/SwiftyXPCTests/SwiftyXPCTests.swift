@@ -4,7 +4,6 @@ import XCTest
 import System
 import TestShared
 
-// swift-format-ignore: AllPublicDeclarationsHaveDocumentation
 final class SwiftyXPCTests: XCTestCase {
     var helperLauncher: HelperLauncher?
 
@@ -298,7 +297,7 @@ final class SwiftyXPCTests: XCTestCase {
             public let size: Int64
         }
 
-        struct IOSurfaceResponse: Codable {
+        struct IOSurfaceResponse: Codable, Sendable {
             @IOSurfaceForXPC var surface: IOSurface
             let status: Int
             let message: String
