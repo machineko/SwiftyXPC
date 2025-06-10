@@ -170,7 +170,7 @@ final class XPCService: Sendable {
     }
     
     struct IOSurfaceResponse: Codable {
-        @IOSurfaceForXPC var surface: IOSurface
+        @IOSurfaceForXPC var surface: IOSurfaceRef
         let status: Int
         let message: String
 

@@ -298,7 +298,7 @@ final class SwiftyXPCTests: XCTestCase {
         }
 
         struct IOSurfaceResponse: Codable, Sendable {
-            @IOSurfaceForXPC var surface: IOSurface
+            @IOSurfaceForXPC var surface: IOSurfaceRef
             let status: Int
             let message: String
         }

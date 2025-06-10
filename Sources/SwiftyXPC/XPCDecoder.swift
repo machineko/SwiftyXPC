@@ -752,7 +752,7 @@ extension IOSurfaceForXPC: Decodable {
 
             self.wrappedValue = ioSurface
         } else {
-            throw DecodingError.typeMismatch(IOSurface.self,
+            throw DecodingError.typeMismatch(IOSurfaceRef.self,
                 DecodingError.Context(codingPath: decoder.codingPath,
                                      debugDescription: "Cannot decode IOSurface from this container",
                                      underlyingError: nil))

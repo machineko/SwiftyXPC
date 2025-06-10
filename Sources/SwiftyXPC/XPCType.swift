@@ -116,9 +116,9 @@ extension xpc_object_t {
 }
 
 @propertyWrapper public struct IOSurfaceForXPC: @unchecked Sendable {
-    public var wrappedValue: IOSurface
+    public var wrappedValue: IOSurfaceRef
 
-    public init(wrappedValue: IOSurface) {
+    public init(wrappedValue: IOSurfaceRef) {
         self.wrappedValue = wrappedValue
     }
 }
