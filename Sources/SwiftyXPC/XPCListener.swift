@@ -273,7 +273,6 @@ public final class XPCListener {
                 flags: XPC_CONNECTION_MACH_SERVICE_LISTENER,
                 codeSigningRequirement: requirement
             )
-            print(connection)
             self._codeSigningRequirement = nil
             self.backing = .connection(connection: connection, isMulti: true)
         }
@@ -289,7 +288,6 @@ public final class XPCListener {
             connection.customEventHandler = { [weak self] in
                 do {
                     guard case .connection = $0.type else {
-                        print("DUPA, coś nie tak \(String(describing: $0))")
                         preconditionFailure("XPCListener is required to have connection backing when run as a Mach service")
                     }
 
@@ -343,7 +341,6 @@ public final class XPCListener {
                 }
             }
         case .connection(let connection, _):
-            print(connection)
             connection.activate()
         }
     }
