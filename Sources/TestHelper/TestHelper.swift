@@ -270,7 +270,7 @@ final class XPCService: Sendable {
         )
     }
 
-    private func tellAJoke(_: XPCConnection, endpoint: XPCEndpoint) async throws {
+    private func tellAJoke(_: XPCConnection, endpoint: SwiftyXPC.XPCEndpoint) async throws {
         let remoteConnection = try XPCConnection(
             type: .remoteServiceFromEndpoint(endpoint),
             codeSigningRequirement: nil
